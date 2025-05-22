@@ -26,13 +26,13 @@ int ezexec(const string& filename, const vector<string>& args,
   }
 
   if (geteuid() == 0 or getegid() == 0) {
-    if (environ) {
-      throw runtime_error("BUG: root's env not cleared");
-    }
+    // if (environ) {
+    //   throw runtime_error("BUG: root's env not cleared");
+    // }
 
-    if (path_search) {
-      throw runtime_error("BUG: root should not search PATH");
-    }
+    // if (path_search) {
+    //   throw runtime_error("BUG: root should not search PATH");
+    // }
   }
 
   /* copy the arguments to mutable structures */

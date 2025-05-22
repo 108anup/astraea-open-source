@@ -275,13 +275,15 @@ int main(int argc, char** argv) {
       throw runtime_error("Trained model does not exist");
     }
     /* IPC and control interval */
-    string ipc_dir = "astraea_ipc";
+    string ipc_dir = "/home/mininet/astraea_ipc";
     // return true if created or dir exists
     fs::create_directory(ipc_dir);
     string ipc_file = fs::path(ipc_dir) / ("astraea" + to_string(pid()));
     IPCSocket ipcsock;
     ipcsock.set_reuseaddr();
+    cerr << "Trying to bind to IPC: " << ipc_file << endl;
     ipcsock.bind(ipc_file);
+    cerr << "Successfull bind to IPC: " << ipc_file << endl;
     ipcsock.listen();
 
     fs::path ipc_path = fs::current_path() / ipc_file;

@@ -101,7 +101,7 @@ static void astraea_cong_control(struct sock* sk,
   //        packet_out:%u", prefix, tp->snd_cwnd, tp->rcv_wnd,
   //        inet_csk(sk)->icsk_ca_state, sk->sk_pacing_rate, bw, rs->delivered,
   //        rs->interval_us, tp->packets_out);
-  struct tcp_sock* tp = tcp_sk(sk);
+  // struct tcp_sock* tp = tcp_sk(sk);
   u64 rate;
   cmpxchg(&sk->sk_pacing_status, SK_PACING_NONE, SK_PACING_NEEDED);
 
