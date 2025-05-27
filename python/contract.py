@@ -1,26 +1,29 @@
 #!/usr/bin/env python3
 
 import argparse
-import sys
-import os
-from os import path
-import numpy as np
-import tensorflow as tf
 import json
-import signal
 import math
+import os
+import signal
+import sys
+from os import path
+
 import matplotlib
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from scipy import interpolate
 
 matplotlib.use("Agg")
-from matplotlib import pyplot as plt
 import time
 
 import context
 from agent.agent import Agent
-from agent.definitions import transform_state, ACTION_DIM, STATE_DIM, GLOBAL_DIM
-from helpers.utils import Params
-from helpers.logger import logger
+from agent.definitions import ACTION_DIM, GLOBAL_DIM, STATE_DIM, transform_state
 from helpers.ipc_socket import IPCSocket
+from helpers.logger import logger
+from helpers.utils import Params
+from matplotlib import pyplot as plt
 
 config_path = path.abspath(
     path.join(path.dirname(__file__), os.pardir, "train", "astraea.json")
@@ -150,13 +153,20 @@ def main():
     delay = 30
     # bin = 0.5
     bin = 1
-    delay_upper_bound = 80
+    delay_upper_bound = 60
+
+    records = []
 
     fig, ax = plt.subplots()
     # for bw in [1.2, 2.4, 6, 7.2, 12]:
-    for bw in [1.2, 4.8, 9.6, 14.4, 19.2]:
+    # for bw in [1.2, 4.8, 9.6, 14.4, 19.2]:
     # for bw in [1,2,3,4,5,6,7,8,9,10]:
     # for bw in [12]:
+    # for bw in [1,3,5,7,9,11,13]:
+    # for bw in [1,2,4,6,8,10,12]:
+    # for bw in range(1, 21):
+    for bw in [1,2,3,4,5,6,7,8]:
+        bw = bw * 1.2
         delay_list = []
         action_list = []
         state["avg_thr"] = bw * 1e6
@@ -187,18 +197,31 @@ def main():
             delay += bin
             print(f"delay: {delay} - action: {act}")
 
-            delay_list.append(delay)
+            delay_list.append(delay - 30)
             action_list.append(act)
         s0_rec_buffer_inf = np.zeros(s_dim)
         delay = 30
 
-        plt.plot(delay_list, action_list, label="Throughput {} Mbps".format(100 * (bw / 12) ))
+        f = interpolate.interp1d(
+            action_list, delay_list, kind="linear", fill_value="extrapolate"
+        )
+        record = {
+            "delay": f(0),
+            "rate": 100 * bw / 12.0
+        }
+        records.append(record)
+
+        this_bw = math.ceil(100 * bw/12)
+        plt.plot(delay_list, action_list, label="{} Mbps".format(this_bw))
     ax.set_xlabel("Delay (ms)")
     ax.set_ylabel("Action")
     ax.legend()
     ax.grid(True)
     ax.minorticks_on()
     fig.savefig("astraea-contract.pdf")
+
+    df = pd.DataFrame(records)
+    df.to_csv("astraea-contract.csv", index=False)
 
 
 if __name__ == "__main__":
