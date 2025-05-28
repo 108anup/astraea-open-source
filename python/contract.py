@@ -25,6 +25,13 @@ from helpers.logger import logger
 from helpers.utils import Params
 from matplotlib import pyplot as plt
 
+from plot_config_light import get_fig_size_paper, get_fig_size_ppt, get_style, get_fig_size_acm_small
+
+
+style = get_style(False, True, True)  # paper
+get_fig_size = get_fig_size_acm_small
+matplotlib.rcParams.update(style)
+
 config_path = path.abspath(
     path.join(path.dirname(__file__), os.pardir, "train", "astraea.json")
 )
@@ -145,83 +152,107 @@ def main():
         "avg_urtt": 30.5 * 1000,
         "min_rtt": 30 * 1000,
         "srtt_us": 30.5 * 1000 * 8,
-        "loss_ratio": 0,
         "packets_out": 150,
+        "loss_ratio": 0,
         "retrans_out": 0,
     }
 
-    delay = 30
-    # bin = 0.5
     bin = 1
-    delay_upper_bound = 60
+    delay_lower_bound = 0
+    delay_upper_bound = 25
+
+    # For 100 Mbps with 2 flows and 30 ms RTprop.
+    ref_bw_mbps = 100/2.0
+    ref_state = {
+        "avg_thr": 6115578,  # basically bytes per second
+        "avg_urtt": 38663,
+        "cnt": 31,
+        "cwnd": 165,
+        "loss_bytes": 0,
+        "loss_ratio": 0.0,
+        "max_packets_out": 164,
+        "max_tput": 6340841,
+        "min_rtt": 30279,
+        "mss_cache": 1448,
+        "pacing_rate": 6176097,
+        "packets_out": 163,
+        "retrans_out": 0,
+        "snd_ssthresh": 2147483647,
+        "srtt_us": 309477,
+        "thr_cnt": 31,
+        "time_delta": 29998,
+    }
 
     records = []
-
-    fig, ax = plt.subplots()
-    # for bw in [1.2, 2.4, 6, 7.2, 12]:
-    # for bw in [1.2, 4.8, 9.6, 14.4, 19.2]:
-    # for bw in [1,2,3,4,5,6,7,8,9,10]:
-    # for bw in [12]:
-    # for bw in [1,3,5,7,9,11,13]:
-    # for bw in [1,2,4,6,8,10,12]:
-    # for bw in range(1, 21):
-    for bw in [1,2,3,4,5,6,7,8]:
-        bw = bw * 1.2
+    figsize = get_fig_size(0.32, 0.4)
+    fig, ax = plt.subplots(figsize=figsize)
+    # for bw_mbps in [10, 20, 30, 40, 50, 60, 70, 80]:
+    for bw_mbps in [10, 30, 50, 70]:
+        bw_ppms = bw_mbps/12.0
         delay_list = []
         action_list = []
-        state["avg_thr"] = bw * 1e6
-        # state["avg_thr"] = 5709365
-        state["pacing_rate"] = bw * (1.25 / 1.2) * 1e6
-        # state["pacing_rate"] = 6088291
-        state["min_rtt"] = 31324
-        state["max_tput"] = bw * (1.22 / 1.2) * 1e6
-        # state["cwnd"] = (bw / 12) * 300
-        # state["packets_out"] = (bw / 12) * 300
 
-        while delay < delay_upper_bound:
-            # logger.info("RL: state is {}".format(state))
-            state["avg_urtt"] = delay * 1e3
-            # state["avg_urtt"] = 36625
-            state["srtt_us"] = delay * 1e3 * 8
-            # state["srtt_us"] = 300100
-            # state["loss_ratio"] = bw * 0.001 
-            state["cwnd"] = 250 * (delay / 30) * (bw / 12)
-            # state["cwnd"] = 156 
-            state["packets_out"] = 250 * (delay / 30) * (bw / 12)
-            # state["packets_out"] = 147
-            
+
+        state["avg_thr"] = ref_state["avg_thr"] * (bw_mbps / ref_bw_mbps)
+        state["pacing_rate"] = ref_state["pacing_rate"] * (bw_mbps / ref_bw_mbps)
+        state["min_rtt"] = ref_state["min_rtt"]
+        state["max_tput"] = ref_state["max_tput"] * (bw_mbps / ref_bw_mbps)
+
+        # state["avg_thr"] = 5709365
+        # state["pacing_rate"] = 6088291
+        # state["cwnd"] = 156
+        # state["avg_urtt"] = 36625
+        # state["min_rtt"] = 31324
+        # state["srtt_us"] = 300100
+        # state["packets_out"] = 147
+        # state["loss_ratio"] = 0
+        # state["retrans_out"] = 0
+
+        for delay_ms in range(delay_lower_bound, delay_upper_bound + 1, bin):
+            rtt_ms = delay_ms + ref_state["min_rtt"] / 1000.0
+            state["avg_urtt"] = rtt_ms * 1e3
+            state["srtt_us"] = rtt_ms * 1e3 * 8  # as srtt is << 3
+            state["cwnd"] = bw_ppms * rtt_ms
+            state["packets_out"] = bw_ppms * rtt_ms
+
             _, s0_rec_buffer_inf, act = inference(
                 -1, agent, state, s0_rec_buffer_inf=s0_rec_buffer_inf
             )
             # clear buffer
-            delay += bin
-            print(f"delay: {delay} - action: {act}")
+            print(f"delay: {delay_ms} - action: {act}")
 
-            delay_list.append(delay - 30)
+            delay_list.append(delay_ms)
             action_list.append(act)
         s0_rec_buffer_inf = np.zeros(s_dim)
-        delay = 30
 
         f = interpolate.interp1d(
             action_list, delay_list, kind="linear", fill_value="extrapolate"
         )
         record = {
             "delay": f(0),
-            "rate": 100 * bw / 12.0
+            "rate": bw_mbps,
         }
         records.append(record)
 
-        this_bw = math.ceil(100 * bw/12)
-        plt.plot(delay_list, action_list, label="{} Mbps".format(this_bw))
-    ax.set_xlabel("Delay (ms)")
-    ax.set_ylabel("Action")
+        ax.plot(delay_list, action_list, label="{}".format(bw_mbps))
+
+    xx = np.linspace(delay_lower_bound, delay_upper_bound, 1000)
+    yy = xx * 0
+    ax.plot(xx, yy, color="black", linestyle="--", label="_")
+    # ax.set_xlabel("Delay (ms)")
+    # ax.set_ylabel("Action")
+    ax.set_xlabel("Delay (ms)", labelpad=3)
+    ax.set_ylabel("Action", labelpad=0)
+    # ax.legend(ncol=2,)
     ax.legend()
     ax.grid(True)
     ax.minorticks_on()
-    fig.savefig("astraea-contract.pdf")
+    # fig.subplots_adjust(left=0.21)
+    fig.tight_layout(pad=0.03)
+    fig.savefig("astraea-contract2.pdf")
 
     df = pd.DataFrame(records)
-    df.to_csv("astraea-contract.csv", index=False)
+    df.to_csv("astraea-contract2.csv", index=False)
 
 
 if __name__ == "__main__":
